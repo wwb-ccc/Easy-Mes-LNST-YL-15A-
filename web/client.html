@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>智慧配药 · 客户端</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.socket.io/4.5.0/socket.io.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif; }
+        body {
+            min-height: 100vh;
+            background: url('BJ.jpg') center / cover fixed no-repeat;
+            position: relative;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 24px;
+            overflow-x: auto;
+            color: rgba(255, 255, 255, 0.9);
+        }
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.25);
+            backdrop-filter: blur(2px);
+            z-index: -1;
+        }
+        body::after {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(circle at 40% 50%, rgba(255,240,200,0.35), rgba(180,210,250,0.15), transparent 70%);
+            filter: blur(100px);
+            animation: liquidFlow 20s infinite alternate ease-in-out;
+            z-index: -1;
+            pointer-events: none;
+        }
+        @keyframes liquidFlow {
+            0% { transform: translate(-5%, -3%) scale(1.1); opacity: 0.4; }
+            50% { transform: translate(8%, -6%) scale(1.4); opacity: 0.6; }
+            100% { transform: translate(6%, 4%) scale(1.3); opacity: 0.7; }
+        }
+        .liquid-card {
+            position: relative;
+            width: 100%;
+            max-width: 1280px;
+            margin: 0 auto;
+            background: rgba(0, 0, 0, 0.25);
+            backdrop-filter: blur(20px) saturate(200%) brightness(1.1);
+            border-radius: 2.5rem;
+            padding: 2rem;
+            border: 1px solid rgba(255, 255, 255, 0.4);
+            border-top: 1px solid rgba(255, 255, 255, 0.8);
+            box-shadow: 0 25px 45px -12px rgba(0, 0, 0, 0.4), inset 0 1px 0 0 rgba(255, 255, 255, 0.4), inset 0 -1px 0 0 rgba(0, 0, 0, 0.05);
+            transition: all 0.3s ease;
+        }
+        .login-card {
+            width: 380px;
+            margin: 0 auto;
+            background: rgba(0, 0, 0, 0.3);
+            backdrop-filter: blur(24px) saturate(220%) brightness(1.1);
+            border-radius: 2rem;
+            padding: 2.2rem 1.8rem 3rem;
+            border: 1px solid rgba(255, 255, 255, 0.4);
+            border-top: 1px solid rgba(255, 255, 255, 0.8);
+            box-shadow: 0 25px 45px -12px rgba(0, 0, 0, 0.4), inset 0 1px 0 0 rgba(255, 255, 255, 0.4), inset 0 -1px 0 0 rgba(0, 0, 0, 0.05);
+            transition: all 0.4s cubic-bezier(0.2, 0.9, 0.4, 1.1);
+            animation: glassBreathing 5s infinite alternate ease-in-out;
+        }
+        @keyframes glassBreathing {
+            0% { box-shadow: 0 20px 35px -12px rgba(0, 0, 0, 0.3), inset 0 1px 0 0 rgba(255,255,255,0.3), 0 0 0 0 rgba(255, 255, 255, 0); }
+            100% { box-shadow: 0 32px 50px -16px rgba(0, 0, 0, 0.5), inset 0 1px 0 0 rgba(255,255,255,0.6), 0 0 20px 5px rgba(255, 255, 255, 0.15); transform: translateY(-2px); }
+        }
+        .login-card:hover {
+            transform: translateY(-8px) scale(1.02);
+            background: rgba(0, 0, 0, 0.35);
+            border-color: rgba(255, 255, 255, 0.6);
+            animation: none;
+        }
+        .login-card::before, .liquid-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-image: radial-gradient(circle at 15% 25%, rgba(255,255,245,0.15) 1px, transparent 1px), radial-gradient(circle at 85% 75%, rgba(255,255,245,0.1) 1px, transparent 1px), radial-gradient(circle at 30% 60%, rgba(255,255,255,0.05) 1px, transparent 1px);
+            background-size: 28px 28px;
+            pointer-events: none;
+            border-radius: inherit;
+            opacity: 0.3;
+            z-index: 1;
+        }
+        .login-title {
+            text-align: center;
+            font-size: 2rem;
+            font-weight: 700;
+            letter-spacing: -0.3px;
+            margin-bottom: 2.5rem;
+            background: linear-gradient(135deg, #ffffff, #e0f7ff, #c0e0ff);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            text-shadow: 0 2px 5px rgba(0,0,0,0.15);
+            position: relative;
+        }
+        .login-title::after {
+            content: '';
+            position: absolute;
+            bottom: -0.5rem;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 60%;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.7), transparent);
+            border-radius: 2px;
+        }
+        .liquid-input {
+            position: relative;
+            margin-bottom: 2.2rem;
+        }
+        .liquid-input input {
+            width: 100%;
+            background: rgba(0, 0, 0, 0.2);
+            backdrop-filter: blur(6px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 3rem;
+            padding: 1.1rem 1.4rem;
+            font-size: 1rem;
+            font-weight: 500;
+            color: #fff;
+            outline: none;
+            transition: all 0.3s ease;
+            box-shadow: inset 0 1px 3px rgba(0,0,0,0.1);
+        }
+        .liquid-input input:focus {
+            background: rgba(0, 0, 0, 0.3);
+            border-color: rgba(255, 255, 255, 0.7);
+            box-shadow: 0 0 0 3px rgba(255,255,255, 0.25);
+        }
+        .liquid-input input::placeholder {
+            color: rgba(255,255,255, 0.5);
+        }
+        .liquid-input label {
+            position: absolute;
+            left: 1.3rem;
+            top: 1rem;
+            pointer-events: none;
+            transition: 0.2s cubic-bezier(0.2, 0.9, 0.4, 1.2);
+            font-weight: 500;
+            color: rgba(255,255,245, 0.8);
+            background: rgba(0, 0, 0, 0.3);
+            backdrop-filter: blur(4px);
+            padding: 0 6px;
+            border-radius: 40px;
+        }
+        .liquid-input input:focus + label,
+        .liquid-input input:valid + label {
+            transform: translateY(-1.8rem) scale(0.85);
+            color: white;
+        }
+        .liquid-btn {
+            position: absolute;
+            bottom: -1.2rem;
+            right: -1rem;
+            background: linear-gradient(120deg, rgba(255,255,255,0.35), rgba(255,255,255,0.25));
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(255, 255, 255, 0.45);
+            border-top: 1px solid rgba(255, 255, 255, 0.8);
+            padding: 0.8rem 2.4rem;
+            font-size: 1rem;
+            font-weight: 600;
+            color: white;
+            border-radius: 3rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 12px 25px -8px rgba(0, 0, 0, 0.4);
+            text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+            animation: btnBreathe 4s infinite ease-in-out;
+        }
+        @keyframes btnBreathe {
+            0%, 100% { box-shadow: 0 10px 20px -8px rgba(0,0,0,0.35), 0 0 0 0 rgba(255, 255, 255, 0.1); transform: scale(1); }
+            50% { box-shadow: 0 16px 32px -8px rgba(0, 0, 0, 0.5), 0 0 25px 8px rgba(255, 255, 255, 0.25); transform: scale(1.03); }
+        }
+        .liquid-btn:hover {
+            animation: none;
+            background: linear-gradient(120deg, rgba(255,255,255,0.45), rgba(255,255,255,0.35));
+            transform: translateY(-4px) scale(1.05);
+            box-shadow: 0 18px 35px -8px rgba(0, 0, 0, 0.6);
+        }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 1.2rem;
+            margin-bottom: 2rem;
+            padding-bottom: 1.2rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.25);
+            margin-top: 0;
+        }
+        .page-title {
+            font-size: 1.9rem;
+            font-weight: 700;
+            letter-spacing: -0.3px;
+            display: flex;
+            align-items: baseline;
+            gap: 0.3rem;
+            flex-wrap: wrap;
+        }
+        .title-fixed {
+            background: linear-gradient(125deg, #ffffff, #d0eaff, #b0d0ff);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+        }
+        .rotating-wrapper {
+            display: inline-block;
+            min-width: 7em;
+            text-align: left;
+        }
+        .rotating-text {
+            background: linear-gradient(125deg, #ffffff, #d0eaff, #b0d0ff);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            transition: opacity 0.6s cubic-bezier(0.2, 0.9, 0.4, 1.1);
+            display: inline-block;
+        }
+        .info-chip {
+            background: rgba(0, 0, 0, 0.35);
+            backdrop-filter: blur(10px);
+            padding: 0.6rem 1.4rem;
+            border-radius: 3rem;
+            font-size: 0.85rem;
+            font-weight: 500;
+            color: rgba(255,255,245, 0.95);
+            border: 1px solid rgba(255, 255, 255, 0.25);
+        }
+        .btn-outline-glass {
+            background: rgba(0, 0, 0, 0.35);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            padding: 0.6rem 1.4rem;
+            border-radius: 2rem;
+            font-weight: 600;
+            font-size: 0.85rem;
+            color: white;
+            cursor: pointer;
+            transition: all 0.25s ease;
+        }
+        .btn-outline-glass:hover {
+            background: rgba(255, 255, 255, 0.25);
+            transform: translateY(-3px);
+            border-color: rgba(255, 255, 255, 0.6);
+        }
+        .logout-btn:hover {
+            background: rgba(220, 90, 70, 0.4);
+        }
+        .order-card {
+            background: rgba(0, 0, 0, 0.2);
+            backdrop-filter: blur(14px);
+            border-radius: 2rem;
+            padding: 1.5rem 1.8rem;
+            border: 1px solid rgba(255, 255, 255, 0.25);
+            transition: all 0.3s ease;
+            margin-bottom: 1.5rem;
+        }
+        .order-card:hover {
+            background: rgba(0, 0, 0, 0.28);
+            transform: translateY(-3px);
+            border-color: rgba(255, 255, 255, 0.4);
+        }
+        .card-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: white;
+            border-left: 3px solid rgba(255, 255, 255, 0.9);
+            padding-left: 1.1rem;
+            margin-bottom: 1.3rem;
+            text-shadow: 0 1px 3px rgba(0,0,0,0.3);
+        }
+        .queue-badge {
+            background: rgba(0, 0, 0, 0.4);
+            backdrop-filter: blur(6px);
+            border-radius: 2rem;
+            padding: 0.7rem 1.4rem;
+            font-size: 0.85rem;
+            font-weight: 500;
+            margin-bottom: 1.8rem;
+            display: inline-block;
+            color: rgba(255,255,240,0.95);
+            border: 1px solid rgba(255,255,255, 0.25);
+        }
+        .table-wrapper {
+            overflow-x: auto;
+            border-radius: 1.8rem;
+            background: rgba(0, 0, 0, 0.1);
+            backdrop-filter: blur(5px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            color: rgba(255, 255, 255, 0.9);
+            font-size: 0.85rem;
+        }
+        th, td {
+            padding: 1.1rem 0.9rem;
+            text-align: left;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+        }
+        th {
+            background: rgba(0, 0, 0, 0.35);
+            font-weight: 600;
+            backdrop-filter: blur(6px);
+            color: white;
+            position: sticky;
+            top: 0;
+        }
+        tr:hover td {
+            background: rgba(255, 255, 255, 0.15);
+        }
+        .status-glass {
+            display: inline-block;
+            padding: 0.3rem 1.1rem;
+            border-radius: 2rem;
+            font-size: 0.75rem;
+            font-weight: 600;
+            backdrop-filter: blur(3px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .status-active { background: rgba(70,130,200,0.4); color: #c0e8ff; }
+        .status-completed { background: rgba(60,140,90,0.4); color: #b8f0d0; }
+        .status-pending { background: rgba(210,130,40,0.4); color: #ffe0b0; }
+        .status-timeout { background: rgba(180,70,60,0.4); color: #ffd0c0; }
+        #contentPage {
+            transition: opacity 0.6s cubic-bezier(0.2, 0.9, 0.4, 1.1), transform 0.6s cubic-bezier(0.2, 0.9, 0.4, 1.1);
+        }
+        @media (max-width: 680px) {
+            .liquid-card, .login-card { padding: 1.5rem; width: 95%; border-radius: 1.8rem; }
+            .page-title { font-size: 1.4rem; flex-wrap: wrap; }
+            .rotating-wrapper { min-width: 5.5em; }
+            .login-title { font-size: 1.7rem; margin-bottom: 2rem; }
+            .liquid-btn { position: static; margin-top: 1rem; width: 100%; }
+            th, td { font-size: 0.75rem; padding: 0.7rem 0.5rem; }
+            .header { flex-direction: column; align-items: stretch; }
+            .info-chip { order: 1; align-self: flex-start; }
+        }
+    </style>
+</head>
+<body>
+    <div id="loginPage" class="liquid-card" style="display: flex; justify-content: center; align-items: center; min-height: 100vh; width: 100%;">
+        <div class="login-card">
+            <div class="login-title">💊 智慧配药系统</div>
+            <form id="loginForm">
+                <div class="liquid-input">
+                    <input type="text" id="username" required autocomplete="off" placeholder=" ">
+                    <label>就诊号</label>
+                </div>
+                <button type="submit" class="liquid-btn">登 录</button>
+            </form>
+        </div>
+    </div>
+
+    <div id="contentPage" class="liquid-card" style="display: none;">
+        <div class="header">
+            <div class="page-title">
+                <span class="title-fixed">✨ 智慧配药 · </span>
+                <span class="rotating-wrapper">
+                    <span id="rotatingText" class="rotating-text">实时追踪</span>
+                </span>
+            </div>
+            <div style="display: flex; gap: 14px; align-items: center; flex-wrap: wrap;">
+                <span class="info-chip">🆔 就诊号: <span id="currentUser"></span></span>
+                <button class="btn-outline-glass" onclick="refreshOrders()">🔄 刷新</button>
+                <button class="btn-outline-glass logout-btn" onclick="logout()">🚪 退出</button>
+            </div>
+        </div>
+
+        <div class="order-card">
+            <div class="card-title">📋 订单列表</div>
+            <div style="margin-bottom: 1.5rem;">
+                <span class="queue-badge" id="queueInfo">⏳ 前方排队订单数: 计算中...</span>
+            </div>
+            <div class="table-wrapper">
+                <table id="ordersTable">
+                    <thead>
+                        <tr>
+                            <th>订单编号</th>
+                            <th>就诊号</th>
+                            <th>库位</th>
+                            <th>大钢珠</th>
+                            <th>小钢珠</th>
+                            <th>状态</th>
+                            <th>创建时间</th>
+                            <th>完成时间</th>
+                        </thead>
+                    <tbody id="ordersTableBody">
+                        <tr><td colspan="8" style="text-align:center;">✨ 暂无订单</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const rotatingTextEl = document.getElementById('rotatingText');
+        const texts = ['实时追踪', '订单信息'];
+        let textIndex = 0;
+        let intervalId = null;
+
+        function startRotation() {
+            if (intervalId) clearInterval(intervalId);
+            intervalId = setInterval(() => {
+                textIndex = (textIndex + 1) % texts.length;
+                if (rotatingTextEl) {
+                    rotatingTextEl.style.opacity = '0';
+                    setTimeout(() => {
+                        rotatingTextEl.textContent = texts[textIndex];
+                        rotatingTextEl.style.opacity = '1';
+                    }, 300);
+                }
+            }, 5000);
+        }
+
+        function initRotation() {
+            if (rotatingTextEl) {
+                rotatingTextEl.textContent = texts[0];
+                startRotation();
+            }
+        }
+
+        const loginPage = document.getElementById('loginPage');
+        const contentPage = document.getElementById('contentPage');
+        const loginForm = document.getElementById('loginForm');
+        const usernameInput = document.getElementById('username');
+        const currentUserSpan = document.getElementById('currentUser');
+        const ordersTableBody = document.getElementById('ordersTableBody');
+        const queueInfoSpan = document.getElementById('queueInfo');
+
+        let currentUserId = null;
+        let allOrders = [];
+
+        const socket = io();
+
+        socket.on('connect', () => {
+            console.log('Client connected');
+            if (currentUserId !== null) socket.emit('get_orders');
+        });
+        socket.on('disconnect', () => {
+            console.log('Disconnected from server');
+        });
+        socket.on('connect_error', (error) => {
+            console.error('Connection error:', error);
+        });
+        socket.on('orders_update', (orders) => {
+            allOrders = orders;
+            if (currentUserId !== null) {
+                filterOrders();
+                updateQueueInfo();
+            }
+        });
+
+        function showContentWithAnimation() {
+            loginPage.style.display = 'none';
+            contentPage.style.display = 'block';
+            contentPage.style.opacity = '0';
+            contentPage.style.transform = 'translateY(20px)';
+            void contentPage.offsetHeight;
+            contentPage.style.opacity = '';
+            contentPage.style.transform = '';
+        }
+
+        function loginUser(uid) {
+            currentUserId = uid;
+            currentUserSpan.innerText = uid;
+            showContentWithAnimation();
+            socket.emit('get_orders');
+            localStorage.setItem('savedUserId', uid);
+            initRotation();
+        }
+
+        function logout() {
+            currentUserId = null;
+            localStorage.removeItem('savedUserId');
+            contentPage.style.display = 'none';
+            loginPage.style.display = 'flex';
+            ordersTableBody.innerHTML = ':<td colspan="8" style="text-align:center;">✨ 暂无订单</td>';
+            queueInfoSpan.innerText = '⏳ 前方排队订单数: 计算中...';
+            if (intervalId) clearInterval(intervalId);
+        }
+
+        window.refreshOrders = () => { if(currentUserId) socket.emit('get_orders'); };
+
+        function filterOrders() {
+            if(!currentUserId) return;
+            const userOrders = allOrders.filter(o => Number(o.face_id) === Number(currentUserId));
+            if(userOrders.length === 0) {
+                ordersTableBody.innerHTML = ':<td colspan="8" style="text-align:center;">📭 暂无订单，请稍后刷新</td>';
+                return;
+            }
+            let html = '';
+            userOrders.forEach(order => {
+                let cls = '';
+                if(order.status === '进行中') cls = 'status-active';
+                else if(order.status === '已完成') cls = 'status-completed';
+                else if(order.status === '待处理') cls = 'status-pending';
+                else if(order.status === '超时') cls = 'status-timeout';
+                else cls = 'status-pending';
+                html += `
+                    <tr>
+                        <td>${escapeHtml(order.order_no)}</td>
+                        <td>${escapeHtml(order.face_id)}</td>
+                        <td>${escapeHtml(order.location)}</td>
+                        <td>${escapeHtml(order.large_balls)}</td>
+                        <td>${escapeHtml(order.small_balls)}</td>
+                        <td><span class="status-glass ${cls}">${escapeHtml(order.status)}</span></td>
+                        <td>${escapeHtml(order.create_time)}</td>
+                        <td>${escapeHtml(order.complete_time || '—')}</td>
+                    </tr>
+                `;
+            });
+            ordersTableBody.innerHTML = html;
+        }
+
+        function escapeHtml(str) { if(!str) return ''; return String(str).replace(/[&<>]/g, function(m){ if(m==='&') return '&amp;'; if(m==='<') return '&lt;'; if(m==='>') return '&gt;'; return m;}); }
+
+        function updateQueueInfo() {
+            if(!currentUserId) return;
+            const userOrders = allOrders.filter(o => Number(o.face_id) === Number(currentUserId));
+            const pending = userOrders.filter(o => o.status === '待处理').length;
+            const activeExists = userOrders.some(o => o.status === '进行中');
+            let msg = `🚦 前方排队订单数: ${pending}`;
+            if(activeExists) msg += ` (⏳ 有订单生产中)`;
+            if(pending===0 && !activeExists && userOrders.length>0) msg = `✅ 所有订单已完成`;
+            else if(userOrders.length===0) msg = `📭 暂无订单数据`;
+            queueInfoSpan.innerText = msg;
+        }
+
+        loginForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const uidStr = usernameInput.value.trim();
+            if(!uidStr) return alert('请输入就诊号');
+            const uidInt = parseInt(uidStr,10);
+            if(isNaN(uidInt)) return alert('就诊号必须为数字');
+            loginUser(uidInt);
+        });
+
+        window.addEventListener('load', () => {
+            const saved = localStorage.getItem('savedUserId');
+            if(saved) { const id = parseInt(saved,10); if(!isNaN(id)) loginUser(id); }
+        });
+    </script>
+</body>
+</html>

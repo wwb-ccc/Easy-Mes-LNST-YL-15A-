@@ -1,0 +1,70 @@
+[
+  {
+    "order_no": 2190,
+    "face_id": 3,
+    "location": 1,
+    "large_balls": 2,
+    "small_balls": 2,
+    "order_qty": 0,
+    "status": "已完成",
+    "barcode": "02",
+    "rfid1": [
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      86
+    ],
+    "rfid2": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "create_time": "2026-03-23 16:13:56",
+    "complete_time": "2026-03-23 16:15:58",
+    "create_timestamp": 1774253636.593579,
+    "start_time": 1774253641.5226316
+  },
+  {
+    "order_no": 2191,
+    "face_id": 2,
+    "location": 2,
+    "large_balls": 1,
+    "small_balls": 2,
+    "order_qty": 0,
+    "status": "已完成",
+    "barcode": "YL1504",
+    "rfid1": [
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      88
+    ],
+    "rfid2": [
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      88
+    ],
+    "create_time": "2026-03-23 16:14:06",
+    "complete_time": "2026-03-23 16:17:57",
+    "create_timestamp": 1774253646.0215266,
+    "start_time": 1774253760.7749686
+  }
+]

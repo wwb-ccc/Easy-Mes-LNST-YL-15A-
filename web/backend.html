@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>智慧配药系统 MES</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <script src="https://cdn.socket.io/4.5.0/socket.io.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Inter', 'Microsoft YaHei', system-ui, sans-serif; }
+        body { background: #f0f2f8; min-height: 100vh; }
+        .app-container { display: flex; height: 100vh; overflow: hidden; }
+        .sidebar { width: 260px; background: #fff; box-shadow: 2px 0 12px rgba(0,0,0,0.05); display: flex; flex-direction: column; z-index: 10; }
+        .logo-area { padding: 24px 20px; border-bottom: 1px solid #eef2f8; margin-bottom: 20px; }
+        .logo-area h2 { font-size: 20px; font-weight: 600; background: linear-gradient(135deg, #1e6fdf, #3b82f6); -webkit-background-clip: text; background-clip: text; color: transparent; }
+        .nav-menu { flex: 1; padding: 0 16px; }
+        .nav-item { display: flex; align-items: center; gap: 12px; padding: 12px 16px; margin-bottom: 8px; border-radius: 12px; color: #4a5568; cursor: pointer; transition: all 0.2s; font-weight: 500; }
+        .nav-item i { width: 24px; font-size: 18px; }
+        .nav-item:hover { background: #f1f5f9; color: #2563eb; }
+        .nav-item.active { background: #eef2ff; color: #2563eb; }
+        .main-content { flex: 1; overflow-y: auto; padding: 24px 28px; background: #f8fafc; }
+        .status-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 28px; background: white; padding: 12px 24px; border-radius: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+        .conn-status { display: flex; gap: 20px; align-items: center; }
+        .badge { padding: 4px 12px; border-radius: 30px; font-size: 13px; font-weight: 500; }
+        .badge.connected { background: #d1fae5; color: #065f46; }
+        .badge.disconnected { background: #fee2e2; color: #991b1b; }
+        .badge.plc-online { background: #dbeafe; color: #1e40af; }
+        .badge.plc-offline { background: #f3f4f6; color: #4b5563; }
+        .card { background: white; border-radius: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); padding: 20px 24px; margin-bottom: 24px; border: 1px solid #eef2f8; }
+        .card-title { font-size: 18px; font-weight: 600; margin-bottom: 18px; display: flex; align-items: center; gap: 8px; color: #1e293b; border-left: 4px solid #3b82f6; padding-left: 12px; }
+        .data-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
+        .data-item { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #f1f5f9; }
+        .data-label { color: #5b6e8c; font-size: 14px; }
+        .data-value { font-weight: 600; color: #0f172a; }
+        .orders-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        .orders-table th { text-align: left; padding: 12px 8px; background: #f8fafc; color: #334155; font-weight: 600; border-bottom: 1px solid #e2e8f0; }
+        .orders-table td { padding: 10px 8px; border-bottom: 1px solid #f0f2f5; color: #1e293b; }
+        .orders-table tr:hover td { background: #fef9e3; }
+        .status-badge { display: inline-block; padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 500; }
+        .status-active { background: #dbeafe; color: #1e40af; }
+        .status-completed { background: #dcfce7; color: #166534; }
+        .status-pending { background: #fff3e3; color: #b45309; }
+        .status-timeout { background: #ffe4e2; color: #b91c1c; }
+        .refresh-btn { background: #3b82f6; border: none; padding: 6px 16px; border-radius: 30px; color: white; font-size: 13px; font-weight: 500; cursor: pointer; transition: 0.2s; }
+        .refresh-btn:hover { background: #2563eb; }
+        @media (max-width: 768px) { .sidebar { width: 200px; } .main-content { padding: 16px; } .data-grid { grid-template-columns: 1fr; } }
+    </style>
+</head>
+<body>
+<div class="app-container">
+    <div class="sidebar">
+        <div class="logo-area"><h2>🏭 智慧配药 MES</h2></div>
+        <div class="nav-menu">
+            <div class="nav-item active" data-module="dashboard"><i class="fas fa-tachometer-alt"></i><span>数据看板</span></div>
+            <div class="nav-item" data-module="orders"><i class="fas fa-list-ul"></i><span>订单列表</span></div>
+        </div>
+    </div>
+    <div class="main-content">
+        <div class="status-bar">
+            <div class="conn-status">
+                <span class="badge" id="socketStatus">连接中...</span>
+                <span class="badge" id="plcStatus">PLC状态未知</span>
+            </div>
+            <button class="refresh-btn" id="manualRefreshBtn">刷新订单</button>
+        </div>
+
+        <div id="dashboardModule">
+            <!-- 条码/RFID -->
+            <div class="card"><div class="card-title"><i class="fas fa-qrcode"></i> 条码 & RFID</div>
+                <div class="data-item"><span class="data-label">条码 (DB11):</span><span id="barcode" class="data-value">-</span></div>
+                <div class="data-item"><span class="data-label">RFID1原始:</span><span id="rfid1_raw" class="data-value">-</span></div>
+                <div class="data-item"><span class="data-label">RFID2原始:</span><span id="rfid2_raw" class="data-value">-</span></div>
+            </div>
+            <!-- MES订单 -->
+            <div class="card"><div class="card-title"><i class="fas fa-clipboard-list"></i> MES订单 & 生产统计</div>
+                <div class="data-grid">
+                    <div class="data-item"><span class="data-label">订单编号:</span><span id="order-no" class="data-value">-</span></div>
+                    <div class="data-item"><span class="data-label">库位:</span><span id="location" class="data-value">-</span></div>
+                    <div class="data-item"><span class="data-label">大钢珠数量:</span><span id="large-balls" class="data-value">-</span></div>
+                    <div class="data-item"><span class="data-label">小钢珠数量:</span><span id="small-balls" class="data-value">-</span></div>
+                    <div class="data-item"><span class="data-label">产品合格数量:</span><span id="product-qualified" class="data-value">-</span></div>
+                    <div class="data-item"><span class="data-label">产品不合格数量:</span><span id="product-unqualified" class="data-value">-</span></div>
+                    <div class="data-item"><span class="data-label">订单合格数量:</span><span id="qualified-qty" class="data-value">-</span></div>
+                    <div class="data-item"><span class="data-label">订单不合格数量:</span><span id="unqualified-qty" class="data-value">-</span></div>
+                </div>
+            </div>
+            <!-- 智能电表 -->
+            <div class="card"><div class="card-title"><i class="fas fa-bolt"></i> 智能电表</div>
+                <div class="data-grid">
+                    <div class="data-item"><span class="data-label">A相电压:</span><span id="a-voltage" class="data-value">- V</span></div>
+                    <div class="data-item"><span class="data-label">A相电流:</span><span id="a-current" class="data-value">- A</span></div>
+                    <div class="data-item"><span class="data-label">有功功率:</span><span id="a-active-power" class="data-value">- kW</span></div>
+                    <div class="data-item"><span class="data-label">无功功率:</span><span id="a-reactive-power" class="data-value">- kVar</span></div>
+                    <div class="data-item"><span class="data-label">视在功率:</span><span id="a-apparent-power" class="data-value">- kVA</span></div>
+                    <div class="data-item"><span class="data-label">功率因数:</span><span id="a-power-factor" class="data-value">-</span></div>
+                    <div class="data-item"><span class="data-label">频率:</span><span id="frequency" class="data-value">- Hz</span></div>
+                    <div class="data-item"><span class="data-label">正向有功电能:</span><span id="pos-active-energy" class="data-value">- Wh</span></div>
+                    <div class="data-item"><span class="data-label">反向有功电能:</span><span id="neg-active-energy" class="data-value">- Wh</span></div>
+                    <div class="data-item"><span class="data-label">正向无功电能:</span><span id="pos-reactive-energy" class="data-value">- Varh</span></div>
+                    <div class="data-item"><span class="data-label">反向无功电能:</span><span id="neg-reactive-energy" class="data-value">- Varh</span></div>
+                    <div class="data-item"><span class="data-label">电压异常报警:</span><span id="voltage-alarm" class="data-value">-</span></div>
+                    <div class="data-item"><span class="data-label">电流异常报警:</span><span id="current-alarm" class="data-value">-</span></div>
+                </div>
+            </div>
+            <!-- 环境 & 振动 -->
+            <div class="card"><div class="card-title"><i class="fas fa-temperature-high"></i> 环境 & 振动</div>
+                <div class="data-grid">
+                    <div class="data-item"><span class="data-label">温度:</span><span id="temperature" class="data-value">- ℃</span></div>
+                    <div class="data-item"><span class="data-label">湿度:</span><span id="humidity" class="data-value">- %RH</span></div>
+                    <div class="data-item"><span class="data-label">大气压力:</span><span id="pressure" class="data-value">- KPa</span></div>
+                    <div class="data-item"><span class="data-label">噪声:</span><span id="noise" class="data-value">- dB</span></div>
+                    <div class="data-item"><span class="data-label">CO₂:</span><span id="co2" class="data-value">- ppm</span></div>
+                    <div class="data-item"><span class="data-label">设备气压:</span><span id="air-pressure" class="data-value">- MPa</span></div>
+                    <div class="data-item"><span class="data-label">矢量和振动:</span><span id="vibration-sum" class="data-value">- mm/s</span></div>
+                    <div class="data-item"><span class="data-label">X轴振动:</span><span id="vibration-x" class="data-value">- mm/s</span></div>
+                    <div class="data-item"><span class="data-label">Y轴振动:</span><span id="vibration-y" class="data-value">- mm/s</span></div>
+                    <div class="data-item"><span class="data-label">Z轴振动:</span><span id="vibration-z" class="data-value">- mm/s</span></div>
+                </div>
+            </div>
+            <!-- 单元状态 -->
+            <div class="card"><div class="card-title"><i class="fas fa-microchip"></i> 单元状态</div>
+                <div class="data-grid">
+                    <div class="data-item"><span class="data-label">料盒供料状态/时序:</span><span id="feed-status-seq" class="data-value">-</span></div>
+                    <div class="data-item"><span class="data-label">编码器/称重:</span><span id="feed-encoder-weight" class="data-value">-</span></div>
+                    <div class="data-item"><span class="data-label">转盘状态/角度/速度:</span><span id="turntable-data" class="data-value">-</span></div>
+                    <div class="data-item"><span class="data-label">高度检测状态/值:</span><span id="height-data" class="data-value">-</span></div>
+                    <div class="data-item"><span class="data-label">装配单元落料(小/大):</span><span id="assembly-drop" class="data-value">-</span></div>
+                    <div class="data-item"><span class="data-label">分拣视觉合格:</span><span id="vision-qualified" class="data-value">-</span></div>
+                    <div class="data-item"><span class="data-label">扫码信息:</span><span id="scan-info" class="data-value">-</span></div>
+                    <div class="data-item"><span class="data-label">伺服位置/速度:</span><span id="servo-pos-speed" class="data-value">-</span></div>
+                    <div class="data-item"><span class="data-label">龙门X/Y位置:</span><span id="gantry-pos" class="data-value">-</span></div>
+                </div>
+            </div>
+            <!-- 仓储 -->
+            <div class="card"><div class="card-title"><i class="fas fa-warehouse"></i> 智能仓储</div>
+                <div class="data-grid">
+                    <div class="data-item"><span class="data-label">当前库位:</span><span id="storage-location" class="data-value">-</span></div>
+                    <div class="data-item"><span class="data-label">库位A-I:</span><span id="storage-detections" class="data-value">-</span></div>
+                </div>
+            </div>
+            <!-- 设备控制 -->
+            <div class="card"><div class="card-title"><i class="fas fa-power-off"></i> 设备控制</div>
+                <div class="data-grid">
+                    <div class="data-item"><span class="data-label">启动信号:</span><span id="device-start" class="data-value">-</span></div>
+                    <div class="data-item"><span class="data-label">复位信号:</span><span id="device-reset" class="data-value">-</span></div>
+                    <div class="data-item"><span class="data-label">停止信号:</span><span id="device-stop" class="data-value">-</span></div>
+                </div>
+            </div>
+        </div>
+
+        <div id="ordersModule" style="display: none;">
+            <div class="card"><div class="card-title"><i class="fas fa-list"></i> 历史订单</div>
+                <div style="overflow-x: auto;">
+                    <table class="orders-table">
+                        <thead>
+                            <tr>
+                                <th>订单编号</th><th>就诊号</th><th>库位</th><th>大钢珠</th><th>小钢珠</th>
+                                <th>条码</th><th>RFID1数据</th><th>状态</th><th>创建时间</th><th>完成时间</th>
+                            </tr>
+                        </thead>
+                        <tbody id="ordersTableBody">
+                            <tr><td colspan="10" style="text-align:center;">暂无订单</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    const socket = io();
+    const socketStatusSpan = document.getElementById('socketStatus');
+    const plcStatusSpan = document.getElementById('plcStatus');
+    const dashboardDiv = document.getElementById('dashboardModule');
+    const ordersDiv = document.getElementById('ordersModule');
+    const manualRefreshBtn = document.getElementById('manualRefreshBtn');
+
+    const navItems = document.querySelectorAll('.nav-item');
+    function switchModule(module) {
+        dashboardDiv.style.display = module === 'dashboard' ? 'block' : 'none';
+        ordersDiv.style.display = module === 'orders' ? 'block' : 'none';
+        navItems.forEach(item => {
+            const mod = item.getAttribute('data-module');
+            if (mod === module) item.classList.add('active');
+            else item.classList.remove('active');
+        });
+    }
+    navItems.forEach(item => {
+        item.addEventListener('click', () => switchModule(item.getAttribute('data-module')));
+    });
+    switchModule('dashboard');
+
+    function renderOrders(orders) {
+        const tbody = document.getElementById('ordersTableBody');
+        if (!orders || orders.length === 0) { tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;">暂无订单</td></tr>'; return; }
+        let html = '';
+        orders.forEach(order => {
+            let cls = '';
+            if (order.status === '进行中') cls = 'status-active';
+            else if (order.status === '已完成') cls = 'status-completed';
+            else if (order.status === '待处理') cls = 'status-pending';
+            else if (order.status === '超时') cls = 'status-timeout';
+            const rfid1 = (order.rfid1 || []).join(',');
+            html += `<tr>
+                <td>${order.order_no}</td><td>${order.face_id}</td><td>${order.location}</td>
+                <td>${order.large_balls}</td><td>${order.small_balls}</td>
+                <td>${order.barcode || ''}</td><td>${rfid1}</td>
+                <td><span class="status-badge ${cls}">${order.status}</span></td>
+                <td>${order.create_time}</td><td>${order.complete_time || ''}</td>
+            </tr>`;
+        });
+        tbody.innerHTML = html;
+    }
+    function refreshOrders() { fetch('/api/orders').then(res => res.json()).then(orders => renderOrders(orders)).catch(err => console.error(err)); }
+    manualRefreshBtn.addEventListener('click', refreshOrders);
+
+    socket.on('connect', () => { socketStatusSpan.textContent = '✅ 已连接'; socketStatusSpan.className = 'badge connected'; });
+    socket.on('disconnect', () => { socketStatusSpan.textContent = '❌ 未连接'; socketStatusSpan.className = 'badge disconnected'; });
+    socket.on('connect_error', () => { socketStatusSpan.textContent = '⚠️ 连接失败'; socketStatusSpan.className = 'badge disconnected'; });
+
+    socket.on('update', (data) => {
+        const plcData = data.plc_read_data || {};
+        document.getElementById('barcode').innerText = plcData.barcode || 'N/A';
+        const rfid1 = plcData.rfid1 || [];
+        const rfid2 = plcData.rfid2 || [];
+        document.getElementById('rfid1_raw').innerText = rfid1.join(',');
+        document.getElementById('rfid2_raw').innerText = rfid2.join(',');
+
+        const mes = plcData.mes_order || {};
+        document.getElementById('order-no').innerText = mes.order_no ?? '-';
+        document.getElementById('location').innerText = mes.location ?? '-';
+        document.getElementById('large-balls').innerText = mes.large_balls ?? '-';
+        document.getElementById('small-balls').innerText = mes.small_balls ?? '-';
+        document.getElementById('product-qualified').innerText = mes.product_qualified ?? '-';
+        document.getElementById('product-unqualified').innerText = mes.product_unqualified ?? '-';
+        document.getElementById('qualified-qty').innerText = mes.qualified_qty ?? '-';
+        document.getElementById('unqualified-qty').innerText = mes.unqualified_qty ?? '-';
+
+        const meter = plcData.smart_meter || {};
+        document.getElementById('a-voltage').innerHTML = (meter.voltage ?? '-') + ' V';
+        document.getElementById('a-current').innerHTML = (meter.current ?? '-') + ' A';
+        document.getElementById('a-active-power').innerHTML = (meter.active_power ?? '-') + ' kW';
+        document.getElementById('a-reactive-power').innerHTML = (meter.reactive_power ?? '-') + ' kVar';
+        document.getElementById('a-apparent-power').innerHTML = (meter.apparent_power ?? '-') + ' kVA';
+        document.getElementById('a-power-factor').innerHTML = (meter.power_factor ?? '-');
+        document.getElementById('frequency').innerHTML = (meter.frequency ?? '-') + ' Hz';
+        document.getElementById('pos-active-energy').innerHTML = (meter.energy_pos ?? '-') + ' Wh';
+        document.getElementById('neg-active-energy').innerHTML = (meter.energy_neg ?? '-') + ' Wh';
+        document.getElementById('pos-reactive-energy').innerHTML = (meter.reactive_pos ?? '-') + ' Varh';
+        document.getElementById('neg-reactive-energy').innerHTML = (meter.reactive_neg ?? '-') + ' Varh';
+        document.getElementById('voltage-alarm').innerText = meter.voltage_alarm ? '⚠️异常' : '正常';
+        document.getElementById('current-alarm').innerText = meter.current_alarm ? '⚠️异常' : '正常';
+
+        const env = plcData.environment || {};
+        document.getElementById('temperature').innerHTML = (env.temp ?? '-') + ' ℃';
+        document.getElementById('humidity').innerHTML = (env.humidity ?? '-') + ' %RH';
+        document.getElementById('pressure').innerHTML = (env.pressure ?? '-') + ' KPa';
+        document.getElementById('noise').innerHTML = (env.noise ?? '-') + ' dB';
+        document.getElementById('co2').innerHTML = env.co2 ?? '-';
+        document.getElementById('air-pressure').innerHTML = (env.air_pressure ?? '-') + ' MPa';
+        document.getElementById('vibration-sum').innerHTML = (env.vibration_sum ?? '-') + ' mm/s';
+        document.getElementById('vibration-x').innerHTML = (env.vibration_x ?? '-') + ' mm/s';
+        document.getElementById('vibration-y').innerHTML = (env.vibration_y ?? '-') + ' mm/s';
+        document.getElementById('vibration-z').innerHTML = (env.vibration_z ?? '-') + ' mm/s';
+
+        const units = plcData.units_status || {};
+        const feed = units.feed || {};
+        document.getElementById('feed-status-seq').innerText = `状态${feed.status} 时序${feed.sequence}`;
+        document.getElementById('feed-encoder-weight').innerText = `编码器${feed.encoder} 称重${feed.weight}`;
+        const turntable = units.turntable || {};
+        document.getElementById('turntable-data').innerText = `状态${turntable.status} 角度${turntable.angle}° 速度${turntable.speed}`;
+        const height = units.height || {};
+        document.getElementById('height-data').innerText = `状态${height.status} 高度${height.value}mm`;
+        const assembly = units.assembly || {};
+        document.getElementById('assembly-drop').innerText = `小钢珠${assembly.small_drop} 大钢珠${assembly.large_drop}`;
+        const sorting = units.sorting || {};
+        document.getElementById('vision-qualified').innerText = sorting.vision_qualified ?? '-';
+        document.getElementById('scan-info').innerText = sorting.scan_info || '-';
+        const servo = units.servo || {};
+        document.getElementById('servo-pos-speed').innerText = `位置${servo.position} 速度${servo.speed}`;
+        const gantry = units.gantry || {};
+        document.getElementById('gantry-pos').innerText = `X:${gantry.x_pos} Y:${gantry.y_pos}`;
+
+        const storage = plcData.storage_status || {};
+        document.getElementById('storage-location').innerText = storage.current_location ?? '-';
+        const det = storage.detections || {};
+        const detStr = Object.entries(det).map(([k,v]) => `${k}:${v?'占用':'空闲'}`).join(' | ');
+        document.getElementById('storage-detections').innerText = detStr;
+
+        const ctrl = plcData.device_controls || {};
+        document.getElementById('device-start').innerText = ctrl.start ? '已启动' : '未启动';
+        document.getElementById('device-reset').innerText = ctrl.reset ? '复位中' : '空闲';
+        document.getElementById('device-stop').innerText = ctrl.stop ? '已停止' : '运行中';
+
+        const isConnected = data.plc_connected;
+        plcStatusSpan.innerText = isConnected ? '✅ PLC 在线' : '❌ PLC 离线';
+        plcStatusSpan.className = isConnected ? 'badge plc-online' : 'badge plc-offline';
+    });
+
+    socket.on('orders_update', (orders) => renderOrders(orders));
+    refreshOrders();
+</script>
+</body>
+</html>
